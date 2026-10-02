@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaijuu Feeding Frenzy</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            background: #0a0a0a;
+            user-select: none;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* City Background */
+        #city-bg {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #1a0033 0%, #2d1b4e 30%, #0d0d2b 60%, #1a1a2e 100%);
+        }
+
+        .building {
+            position: absolute;
+            bottom: 0;
+            background: linear-gradient(to top, #1a1a2e, #2a2a4a);
+            border: 1px solid #333;
+        }
+
+        .building::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 15px,
+                rgba(255, 200, 0, 0.3) 15px,
+                rgba(255, 200, 0, 0.3) 17px
+            ),
+            repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 20px,
+                rgba(255, 200, 0, 0.3) 20px,
+                rgba(255, 200, 0, 0.3) 22px
+            );
+        }
+
+        /* Stars */
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 2s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8);
+            border-bottom: 2px solid #ff4444;
+            z-index: 100;
+        }
+
+        #hud-left, #hud-center, #hud-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .hud-label {
+            color: #aaa;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .hud-value {
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        #health-bar-container {
+            width: 200px;
+            height: 20px;
+            background: #333;
+            border: 2px solid #666;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        #health-bar {
+            height: 100%;
+            background: linear-gradient(to right, #ff0000, #ff4444);
+            transition: width 0.3s ease;
+            border-radius: 8px;
+        }
+
+        #health-text {
+            color: #ff4444;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        #score-display {
+            color: #ffcc00;
+            font-size: 22px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #ffcc00;
+        }
+
+        #phase-display {
+            color: #00ffcc;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        #cooldown-indicator {
+            color: #ff6600;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        #cooldown-indicator.active {
+            opacity: 1;
+        }
+
+        /* Kaijuu */
+        .kaijuu {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: transform 0.1s;
+            z-index: 50;
+            cursor: default;
+        }
+
+        .kaijuu-body {
+            font-size: 40px;
+            text-shadow: 0 0 10px rgba(255, 100, 0, 0.5);
+            animation: kaijuu-idle 1s infinite;
+        }
+
+        @keyframes kaijuu-idle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+
+        .kaijuu-label {
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-top: 2px;
+            border: 1px solid #666;
+        }
+
+        .kaijuu-key {
+            background: #ffcc00;
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+            font-weight: bold;
+            margin-top: 3px;
+            border: 2px solid #ff9900;
+        }
+
+        .kaijuu.flying .kaijuu-body {
+            animation: kaijuu-fly 0.8s infinite;
+        }
+
+        @keyframes kaijuu-fly {
+            0%, 100% { transform: translateY(0) rotate(-2deg); }
+            50% { transform: translateY(-8px) rotate(2deg); }
+        }
+
+        .kaijuu.fed {
+            animation: fed-animation 0.5s forwards;
+        }
+
+        @keyframes fed-animation {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.8; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        .kaijuu.wrong {
+            animation: wrong-animation 0.3s;
+        }
+
+        @keyframes wrong-animation {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        /* Food particles */
+        .food-particle {
+            position: absolute;
+            font-size: 20px;
+            animation: food-float 1s forwards;
+            z-index: 60;
+            pointer-events: none;
+        }
+
+        @keyframes food-float {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-50px) scale(0.5); opacity: 0; }
+        }
+
+        /* Screens */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 200;
+            transition: opacity 0.5s;
+        }
+
+        .screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .screen h1 {
+            font-size: 48px;
+            color: #ff4444;
+            text-shadow: 0 0 20px #ff4444, 0 0 40px #ff0000;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .screen h2 {
+            font-size: 28px;
+            color: #ffcc00;
+            margin-bottom: 15px;
+        }
+
+        .screen p {
+            color: #ccc;
+            font-size: 16px;
+            margin-bottom: 10px;
+            text-align: center;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+
+        .screen .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #444;
+            border-radius: 10px;
+            padding: 20px 30px;
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .screen .instructions li {
+            color: #aaa;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+
+        .screen .instructions li strong {
+            color: #ffcc00;
+        }
+
+        .btn {
+            padding: 15px 40px;
+            font-size: 20px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            border: 2px solid #ff4444;
+            background: transparent;
+            color: #ff4444;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 20px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .btn:hover {
+            background: #ff4444;
+            color: #000;
+            box-shadow: 0 0 20px #ff4444;
+        }
+
+        /* Phase transition */
+        #phase-transition {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ffcc;
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 20px #00ffcc;
+            z-index: 150;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+
+        #phase-transition.show {
+            opacity: 1;
+        }
+
+        /* Damage flash */
+        #damage-flash {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 0, 0, 0.3);
+            z-index: 90;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        #damage-flash.active {
+            opacity: 1;
+        }
+
+        /* Score popup */
+        .score-popup {
+            position: absolute;
+            color: #00ff00;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 70;
+            pointer-events: none;
+            animation: popup-rise 1s forwards;
+        }
+
+        @keyframes popup-rise {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-60px); opacity: 0; }
+        }
+
+        /* Progress bar */
+        #progress-bar-container {
+            width: 150px;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        #progress-bar {
+            height: 100%;
+            background: linear-gradient(to right, #00ffcc, #00ff88);
+            transition: width 0.3s;
+            border-radius: 4px;
+        }
+
+        /* Kaijuu type indicator for phase 2 */
+        .kaijuu-type-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            font-size: 14px;
+            background: rgba(0,0,0,0.8);
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #666;
+        }
+
+        /* Context menu prevention message */
+        #click-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #aaa;
+            font-size: 14px;
+            background: rgba(0,0,0,0.8);
+            padding: 8px 20px;
+            border-radius: 20px;
+            border: 1px solid #444;
+            z-index: 80;
+            display: none;
+        }
+
+        #click-hint.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- City Background -->
+        <div id="city-bg"></div>
+
+        <!-- Damage Flash -->
+        <div id="damage-flash"></div>
+
+        <!-- HUD -->
+        <div id="hud" style="display:none;">
+            <div id="hud-left">
+                <div>
+                    <div class="hud-label">Vida</div>
+                    <div id="health-bar-container">
+                        <div id="health-bar" style="width: 100%"></div>
+                    </div>
+                    <div id="health-text">10 / 10</div>
+                </div>
+            </div>
+            <div id="hud-center">
+                <div>
+                    <div id="phase-display">FASE 1 - TECLADO</div>
+                    <div id="cooldown-indicator">⏳ Espera...</div>
+                </div>
+            </div>
+            <div id="hud-right">
+                <div>
+                    <div class="hud-label">Puntos</div>
+                    <div id="score-display">0 / 500</div>
+                    <div id="progress-bar-container">
+                        <div id="progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Click Hint for Phase 2 -->
+        <div id="click-hint">🖱️ Izquierdo = Voladores | 🖱️ Derecho = Tierra</div>
+
+        <!-- Phase Transition -->
+        <div id="phase-transition"></div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="screen">
+            <h1>🦎 KAIJUU FEEDING FRENZY 🦎</h1>
+            <h2>Alimenta a los monstruos de Godzilla</h2>
+            <div class="instructions">
+                <ul>
+                    <li><strong>Fase 1:</strong> Oprime la tecla indicada sobre cada kaijuu para alimentarlo</li>
+                    <li><strong>Fase 2:</strong> Clic izquierdo para voladores, clic derecho para terrestres</li>
+                    <li><strong>Meta:</strong> Alcanza 500 puntos en cada fase</li>
+                    <li><strong>Vida:</strong> Pierdes vida si un kaijuu escapa. +1 vida cada 2 alimentados</li>
+                    <li><strong>Cooldown:</strong> 1 segundo entre cada acción (¡no hagas spam!)</li>
+                </ul>
+            </div>
+            <button class="btn" onclick="startGame()">INICIAR</button>
+        </div>
+
+        <!-- Phase 2 Screen -->
+        <div id="phase2-screen" class="screen hidden">
+            <h1>⚡ FASE 2 DESBLOQUEADA ⚡</h1>
+            <h2>¡Ahora usa el mouse!</h2>
+            <div class="instructions">
+                <ul>
+                    <li><strong>Clic IZQUIERDO:</strong> Alimentar kaijuus VOLADORES (🦅🦇🦋)</li>
+                    <li><strong>Clic DERECHO:</strong> Alimentar kaijuus TERRESTRES (🦎🐉🤖)</li>
+                    <li><strong>¡No uses el clic incorrecto o perderás vida!</strong></li>
+                    <li><strong>Meta:</strong> 500 puntos</li>
+                </ul>
+            </div>
+            <button class="btn" onclick="startPhase2()">CONTINUAR</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameover-screen" class="screen hidden">
+            <h1>💀 GAME OVER 💀</h1>
+            <h2 id="gameover-reason">Los kaijuus han escapado</h2>
+            <p id="gameover-score">Puntuación final: 0</p>
+            <button class="btn" onclick="restartGame()">REINTENTAR</button>
+        </div>
+
+        <!-- Victory Screen -->
+        <div id="victory-screen" class="screen hidden">
+            <h1>🏆 ¡VICTORIA! 🏆</h1>
+            <h2>¡Has alimentado a todos los kaijuus!</h2>
+            <p id="victory-score">Puntuación total: 1000</p>
+            <button class="btn" onclick="restartGame()">JUGAR DE NUEVO</button>
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        const state = {
+            phase: 0,
+            score: 0,
+            phaseScore: 0,
+            health: 10,
+            maxHealth: 10,
+            kaijuus: [],
+            cooldown: false,
+            cooldownTime: 1000,
+            spawnInterval: 2000,
+            kaijuuSpeed: 1,
+            fedCount: 0,
+            running: false,
+            spawnTimer: null,
+            gameLoop: null,
+            kaijuuId: 0
+        };
+
+        // Kaijuu definitions
+        const kaijuuTypes = {
+            ground: [
+                { name: 'Godzilla', emoji: '🦎', color: '#4a9' },
+                { name: 'Anguirus', emoji: '🐢', color: '#a64' },
+                { name: 'Mechagodzilla', emoji: '🤖', color: '#888' },
+                { name: 'Biollante', emoji: '🌿', color: '#4a4' },
+                { name: 'Destoroyah', emoji: '🦀', color: '#a22' },
+                { name: 'Titanosaurus', emoji: '🐊', color: '#684' },
+                { name: 'Hedorah', emoji: '💀', color: '#555' }
+            ],
+            flying: [
+                { name: 'Mothra', emoji: '🦋', color: '#fa0' },
+                { name: 'Rodan', emoji: '🦅', color: '#a44' },
+                { name: 'King Ghidorah', emoji: '🐉', color: '#cc0' },
+                { name: 'Battra', emoji: '🦇', color: '#44a' },
+                { name: 'Gigan', emoji: '🦟', color: '#a4a' }
+            ]
+        };
+
+        const foods = ['🍖', '🥩', '🍗', '☢️', '⚡', '🔥'];
+
+        // DOM Elements
+        const gameContainer = document.getElementById('game-container');
+        const hud = document.getElementById('hud');
+        const healthBar = document.getElementById('health-bar');
+        const healthText = document.getElementById('health-text');
+        const scoreDisplay = document.getElementById('score-display');
+        const phaseDisplay = document.getElementById('phase-display');
+        const cooldownIndicator = document.getElementById('cooldown-indicator');
+        const progressBar = document.getElementById('progress-bar');
+        const damageFlash = document.getElementById('damage-flash');
+        const clickHint = document.getElementById('click-hint');
+        const phaseTransition = document.getElementById('phase-transition');
+
+        // Initialize city
+        function createCity() {
+            const cityBg = document.getElementById('city-bg');
+            cityBg.innerHTML = '';
+
+            // Stars
+            for (let i = 0; i < 50; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 40 + '%';
+                star.style.animationDelay = Math.random() * 2 + 's';
+                cityBg.appendChild(star);
+            }
+
+            // Buildings
+            const buildingCount = 15;
+            for (let i = 0; i < buildingCount; i++) {
+                const building = document.createElement('div');
+                building.className = 'building';
+                const width = 40 + Math.random() * 80;
+                const height = 100 + Math.random() * 250;
+                building.style.width = width + 'px';
+                building.style.height = height + 'px';
+                building.style.left = (i * (100 / buildingCount)) + '%';
+                building.style.opacity = 0.5 + Math.random() * 0.5;
+                cityBg.appendChild(building);
+            }
+        }
+
+        // Start Game
+        function startGame() {
+            document.getElementById('start-screen').classList.add('hidden');
+            hud.style.display = 'flex';
+            state.phase = 1;
+            state.score = 0;
+            state.phaseScore = 0;
+            state.health = 10;
+            state.fedCount = 0;
+            state.running = true;
+            updateHUD();
+            startPhase();
+        }
+
+        function startPhase() {
+            state.phaseScore = 0;
+            state.kaijuus = [];
+
+            // Clear existing kaijuus
+            document.querySelectorAll('.kaijuu').forEach(el => el.remove());
+
+            if (state.phase === 1) {
+                phaseDisplay.textContent = 'FASE 1 - TECLADO';
+                clickHint.classList.remove('show');
+            } else {
+                phaseDisplay.textContent = 'FASE 2 - MOUSE';
+                clickHint.classList.add('show');
+            }
+
+            updateHUD();
+            startSpawning();
+            startGameLoop();
+        }
+
+        function startPhase2() {
+            document.getElementById('phase2-screen').classList.add('hidden');
+            state.phase = 2;
+            startPhase();
+        }
+
+        // Spawning
+        function startSpawning() {
+            if (state.spawnTimer) clearInterval(state.spawnTimer);
+            state.spawnTimer = setInterval(() => {
+                if (state.running) {
+                    spawnKaijuu();
+                }
+            }, state.spawnInterval);
+            // Spawn first one immediately
+            spawnKaijuu();
+        }
+
+        function spawnKaijuu() {
+            if (!state.running) return;
+
+            const isFlying = Math.random() < 0.4;
+            const types = isFlying ? kaijuuTypes.flying : kaijuuTypes.ground;
+            const type = types[Math.floor(Math.random() * types.length)];
+
+            const kaijuu = {
+                id: state.kaijuuId++,
+                name: type.name,
+                emoji: type.emoji,
+                color: type.color,
+                isFlying: isFlying,
+                key: generateKey(),
+                x: 0,
+                y: 0,
+                vx: 0,
+                vy: 0,
+                element: null,
+                alive: true
+            };
+
+            // Position based on type
+            const containerWidth = window.innerWidth;
+            const containerHeight = window.innerHeight;
+
+            if (isFlying) {
+                // Enter from top or sides
+                const side = Math.random();
+                if (side < 0.5) {
+                    // From top
+                    kaijuu.x = 100 + Math.random() * (containerWidth - 200);
+                    kaijuu.y = -60;
+                    kaijuu.vx = (Math.random() - 0.5) * 2;
+                    kaijuu.vy = 0.5 + Math.random() * 1;
+                } else if (side < 0.75) {
+                    // From left
+                    kaijuu.x = -60;
+                    kaijuu.y = 50 + Math.random() * (containerHeight * 0.4);
+                    kaijuu.vx = 1 + Math.random() * 1.5;
+                    kaijuu.vy = 0.3 + Math.random() * 0.5;
+                } else {
+                    // From right
+                    kaijuu.x = containerWidth + 60;
+                    kaijuu.y = 50 + Math.random() * (containerHeight * 0.4);
+                    kaijuu.vx = -(1 + Math.random() * 1.5);
+                    kaijuu.vy = 0.3 + Math.random() * 0.5;
+                }
+            } else {
+                // Enter from left or right side at ground level
+                const fromLeft = Math.random() < 0.5;
+                kaijuu.x = fromLeft ? -60 : containerWidth + 60;
+                kaijuu.y = containerHeight - 120 - Math.random() * 80;
+                kaijuu.vx = fromLeft ? (0.8 + Math.random() * 1.2) : -(0.8 + Math.random() * 1.2);
+                kaijuu.vy = 0;
+            }
+
+            // Create DOM element
+            const el = document.createElement('div');
+            el.className = 'kaijuu' + (isFlying ? ' flying' : '');
+            el.dataset.id = kaijuu.id;
+            el.innerHTML = `
+                <div class="kaijuu-body">${kaijuu.emoji}</div>
+                <div class="kaijuu-label">${kaijuu.name}</div>
+                ${state.phase === 1 ? `<div class="kaijuu-key">${kaijuu.key}</div>` : ''}
+                ${state.phase === 2 ? `<div class="kaijuu-type-badge">${isFlying ? '🖱️L' : '🖱️R'}</div>` : ''}
+            `;
+            el.style.left = kaijuu.x + 'px';
+            el.style.top = kaijuu.y + 'px';
+            gameContainer.appendChild(el);
+            kaijuu.element = el;
+
+            state.kaijuus.push(kaijuu);
+        }
+
+        function generateKey() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            return chars[Math.floor(Math.random() * chars.length)];
+        }
+
+        // Game Loop
+        function startGameLoop() {
+            if (state.gameLoop) cancelAnimationFrame(state.gameLoop);
+
+            function loop() {
+                if (!state.running) return;
+
+                updateKaijuus();
+                state.gameLoop = requestAnimationFrame(loop);
+            }
+            loop();
+        }
+
+        function updateKaijuus() {
+            const containerWidth = window.innerWidth;
+            const containerHeight = window.innerHeight;
+            const toRemove = [];
+
+            for (let kaijuu of state.kaijuus) {
+                if (!kaijuu.alive) continue;
+
+                kaijuu.x += kaijuu.vx;
+                kaijuu.y += kaijuu.vy;
+
+                kaijuu.element.style.left = kaijuu.x + 'px';
+                kaijuu.element.style.top = kaijuu.y + 'px';
+
+                // Check if out of bounds
+                const margin = 100;
+                if (kaijuu.x < -margin || kaijuu.x > containerWidth + margin ||
+                    kaijuu.y > containerHeight + margin || kaijuu.y < -margin * 2) {
+                    kaijuu.alive = false;
+                    kaijuu.element.remove();
+                    toRemove.push(kaijuu.id);
+                    takeDamage(1);
+                }
+            }
+
+            state.kaijuus = state.kaijuus.filter(k => k.alive);
+        }
+
+        // Feeding mechanics
+        function feedKaijuu(kaijuu) {
+            if (!kaijuu || !kaijuu.alive) return false;
+
+            kaijuu.alive = false;
+            kaijuu.element.classList.add('fed');
+
+            // Create food particles
+            for (let i = 0; i < 3; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'food-particle';
+                particle.textContent = foods[Math.floor(Math.random() * foods.length)];
+                particle.style.left = (kaijuu.x + 10 + Math.random() * 30) + 'px';
+                particle.style.top = (kaijuu.y + Math.random() * 20) + 'px';
+                gameContainer.appendChild(particle);
+                setTimeout(() => particle.remove(), 1000);
+            }
+
+            // Score popup
+            const popup = document.createElement('div');
+            popup.className = 'score-popup';
+            popup.textContent = '+50';
+            popup.style.left = kaijuu.x + 'px';
+            popup.style.top = (kaijuu.y - 20) + 'px';
+            gameContainer.appendChild(popup);
+            setTimeout(() => popup.remove(), 1000);
+
+            // Update score
+            state.score += 50;
+            state.phaseScore += 50;
+            state.fedCount++;
+
+            // Health recovery every 2 fed
+            if (state.fedCount % 2 === 0 && state.health < state.maxHealth) {
+                state.health = Math.min(state.health + 1, state.maxHealth);
+            }
+
+            updateHUD();
+
+            setTimeout(() => {
+                if (kaijuu.element && kaijuu.element.parentNode) {
+                    kaijuu.element.remove();
+                }
+            }, 500);
+
+            // Check phase completion
+            if (state.phaseScore >= 500) {
+                phaseComplete();
+            }
+
+            return true;
+        }
+
+        function wrongFeed(kaijuu) {
+            if (!kaijuu || !kaijuu.alive) return;
+
+            kaijuu.element.classList.add('wrong');
+            setTimeout(() => {
+                if (kaijuu.element) kaijuu.element.classList.remove('wrong');
+            }, 300);
+
+            takeDamage(1);
+        }
+
+        function takeDamage(amount) {
+            state.health = Math.max(0, state.health - amount);
+            damageFlash.classList.add('active');
+            setTimeout(() => damageFlash.classList.remove('active'), 200);
+            updateHUD();
+
+            if (state.health <= 0) {
+                gameOver('¡Los kaijuus han destruido la ciudad!');
+            }
+        }
+
+        function phaseComplete() {
+            state.running = false;
+            clearInterval(state.spawnTimer);
+            cancelAnimationFrame(state.gameLoop);
+
+            // Clear remaining kaijuus
+            state.kaijuus.forEach(k => {
+                if (k.element) k.element.remove();
+            });
+            state.kaijuus = [];
+
+            if (state.phase === 1) {
+                // Show phase 2 screen
+                setTimeout(() => {
+                    document.getElementById('phase2-screen').classList.remove('hidden');
+                }, 500);
+            } else if (state.phase === 2) {
+                // Victory!
+                setTimeout(() => {
+                    document.getElementById('victory-score').textContent = `Puntuación total: ${state.score}`;
+                    document.getElementById('victory-screen').classList.remove('hidden');
+                }, 500);
+            }
+        }
+
+        function gameOver(reason) {
+            state.running = false;
+            clearInterval(state.spawnTimer);
+            cancelAnimationFrame(state.gameLoop);
+
+            document.getElementById('gameover-reason').textContent = reason;
+            document.getElementById('gameover-score').textContent = `Puntuación final: ${state.score}`;
+            document.getElementById('gameover-screen').classList.remove('hidden');
+        }
+
+        function restartGame() {
+            // Clean up
+            document.querySelectorAll('.kaijuu, .food-particle, .score-popup').forEach(el => el.remove());
+            document.getElementById('gameover-screen').classList.add('hidden');
+            document.getElementById('victory-screen').classList.add('hidden');
+            document.getElementById('phase2-screen').classList.add('hidden');
+            hud.style.display = 'none';
+            clickHint.classList.remove('show');
+
+            // Reset state
+            state.phase = 0;
+            state.score = 0;
+            state.phaseScore = 0;
+            state.health = 10;
+            state.kaijuus = [];
+            state.cooldown = false;
+            state.fedCount = 0;
+            state.running = false;
+            state.kaijuuId = 0;
+
+            document.getElementById('start-screen').classList.remove('hidden');
+        }
+
+        // Update HUD
+        function updateHUD() {
+            const healthPercent = (state.health / state.maxHealth) * 100;
+            healthBar.style.width = healthPercent + '%';
+            healthText.textContent = `${state.health} / ${state.maxHealth}`;
+
+            if (healthPercent <= 30) {
+                healthBar.style.background = 'linear-gradient(to right, #ff0000, #cc0000)';
+            } else if (healthPercent <= 60) {
+                healthBar.style.background = 'linear-gradient(to right, #ff6600, #ff4400)';
+            } else {
+                healthBar.style.background = 'linear-gradient(to right, #ff0000, #ff4444)';
+            }
+
+            scoreDisplay.textContent = `${state.phaseScore} / 500`;
+            const progressPercent = Math.min((state.phaseScore / 500) * 100, 100);
+            progressBar.style.width = progressPercent + '%';
+        }
+
+        // Cooldown management
+        function startCooldown() {
+            state.cooldown = true;
+            cooldownIndicator.classList.add('active');
+            setTimeout(() => {
+                state.cooldown = false;
+                cooldownIndicator.classList.remove('active');
+            }, state.cooldownTime);
+        }
+
+        // Keyboard handler (Phase 1)
+        document.addEventListener('keydown', (e) => {
+            if (!state.running || state.phase !== 1) return;
+            if (state.cooldown) return;
+
+            const key = e.key.toUpperCase();
+            if (!/^[A-Z0-9]$/.test(key)) return;
+
+            e.preventDefault();
+
+            // Find kaijuu with matching key
+            const target = state.kaijuus.find(k => k.alive && k.key === key);
+
+            if (target) {
+                startCooldown();
+                feedKaijuu(target);
+            }
+        });
+
+        // Mouse handlers (Phase 2)
+        document.addEventListener('click', (e) => {
+            if (!state.running || state.phase !== 2) return;
+            if (state.cooldown) return;
+
+            // Left click - for flying kaijuus
+            const kaijuuEl = e.target.closest('.kaijuu');
+            if (!kaijuuEl) return;
+
+            const kaijuuId = parseInt(kaijuuEl.dataset.id);
+            const kaijuu = state.kaijuus.find(k => k.id === kaijuuId && k.alive);
+
+            if (!kaijuu) return;
+
+            if (kaijuu.isFlying) {
+                // Correct! Left click for flying
+                startCooldown();
+                feedKaijuu(kaijuu);
+            } else {
+                // Wrong! Left click on ground kaijuu
+                startCooldown();
+                wrongFeed(kaijuu);
+            }
+        });
+
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+
+            if (!state.running || state.phase !== 2) return;
+            if (state.cooldown) return;
+
+            // Right click - for ground kaijuus
+            const kaijuuEl = e.target.closest('.kaijuu');
+            if (!kaijuuEl) return;
+
+            const kaijuuId = parseInt(kaijuuEl.dataset.id);
+            const kaijuu = state.kaijuus.find(k => k.id === kaijuuId && k.alive);
+
+            if (!kaijuu) return;
+
+            if (!kaijuu.isFlying) {
+                // Correct! Right click for ground
+                startCooldown();
+                feedKaijuu(kaijuu);
+            } else {
+                // Wrong! Right click on flying kaijuu
+                startCooldown();
+                wrongFeed(kaijuu);
+            }
+        });
+
+        // Initialize
+        createCity();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            createCity();
+        });
+    </script>
+</body>
+</html>
